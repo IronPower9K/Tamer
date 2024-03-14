@@ -16,6 +16,12 @@ import torchvision.transforms as T
 import torch.optim as optim
 from torch import nn
 
+import matplotlib.pyplot as plt
+
+score = []
+step_play = []
+sustain_score = 0
+
 class Callback(object):
     play = None
     def __init__(self): pass
@@ -47,6 +53,8 @@ class PyGymCallback(Callback):
         self.fps = fps
         self.zoom = zoom
         self.human = human
+        self.step_counter = 0
+        self.score_pass = 0
 
     def before_play(self):
         rendered = self.env.render(mode='rgb_array')
@@ -74,6 +82,29 @@ class PyGymCallback(Callback):
     
     def step(self):
         self.play.next_state, self.play.reward, self.play.term, self.play.info = self.env.step(self.action)
+        self.step_counter += 1
+        
+        global step_c
+        step_play.append(self.step_counter)
+        
+        if self.play.reward != 0 and self.score_pass == 0:
+            self.score_pass = 1
+        elif self.score_pass == 0:
+            global score
+            score.append(self.play.reward)
+            
+
+        if self.score_pass == 1 and self.play.reward != 0:
+            global sustain_score
+            sustain_score = self.play.reward
+            score.append(sustain_score)
+            print(sustain_score)
+        
+        elif self.score_pass == 1 and self.play.reward == 0:
+            score.append(sustain_score)    
+        
+        
+        
 
     def after_step(self):
         # TODO: This might be an issue later on but for now we only pop the events 
@@ -81,6 +112,8 @@ class PyGymCallback(Callback):
         # events may want to store the events in a Player class variable for other callbacks
         # to have access to.
         # print('here in after_step')
+        
+        
         for event in pygame.event.get([pygame.QUIT, pygame.VIDEORESIZE]):
             if event.type == pygame.QUIT:
                 self.play.term = True
@@ -102,12 +135,15 @@ class PyGymCallback(Callback):
         if self.next_state is not None and self.human:
             rendered = self.env.render(mode='rgb_array')
             self._update_screen(self.screen, rendered)
-            caption = f"{round(self.clock.get_fps())} {self.episode}"
+            
+            caption = f"score : {self.play.reward} {round(self.clock.get_fps())} {self.episode}"
             pygame.display.set_caption(caption)
             pygame.display.update()
 
     def after_play(self):
         pygame.quit()
+
+      
 
 class PyControllerCallback(PyGymCallback): 
     def __init__(self, keys_to_action=None, **kwargs):
@@ -169,6 +205,7 @@ class Player(Process):
         self._build_callbacks(callbacks)  
 
     def play(self, n_episodes=None, n_steps=None):
+        
         self.n_episodes = n_episodes
         self.state = None
         self.reward = None
@@ -251,7 +288,7 @@ class Player(Process):
 # TODO: Create Training Callbacks  
 def main():
 
-    env = gym.make("Bowling-v0").unwrapped 
+    env = gym.make("BowlingNoFrameskip-v4").unwrapped 
 
     player = Player(callbacks=[PyControllerCallback(env=env, zoom=4, fps=60, human=True)]) #pass the queue
     player.play(n_episodes=1)
